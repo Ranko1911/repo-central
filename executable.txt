@@ -1,0 +1,125 @@
+# ==============================================================================
+# SCRIPT UNIVERSAL DE MIGRACIÓN A SUBMÓDULOS CON CÁPSULA DEL TIEMPO
+# Autor: Gemini (Asistente de IA)
+# ==============================================================================
+
+# 1. CONFIGURACIÓN INICIAL
+$repoRoot = Get-Location
+$fecha = Get-Date -Format 'yyyy-MM-dd_HHmm'
+$desktopPath = [Environment]::GetFolderPath("Desktop")
+$rutaCapsula = Join-Path $desktopPath "BACKUP_REPOS_$fecha"
+
+Clear-Host
+Write-Host "╔════════════════════════════════════════════════════════════════╗" -ForegroundColor Cyan
+Write-Host "║   MIGRACIÓN INTELIGENTE DE REPOSITORIOS ANIDADOS A SUBMÓDULOS  ║" -ForegroundColor Cyan
+Write-Host "╚════════════════════════════════════════════════════════════════╝" -ForegroundColor Cyan
+Write-Host "`n📁 Directorio de trabajo: $repoRoot"
+Write-Host "📦 La Cápsula del Tiempo (Backup) estará en: $rutaCapsula" -ForegroundColor Yellow
+
+# 2. ESCANEO AUTOMÁTICO
+Write-Host "`n🔍 Escaneando carpetas en busca de repositorios anidados..." -ForegroundColor Cyan
+
+# Buscamos carpetas .git, excluyendo la del propio directorio raíz y los que ya están dentro de .git/modules
+$carpetasGit = Get-ChildItem -Path $repoRoot -Recurse -Directory -Filter ".git" | 
+    Where-Object { 
+        $_.Parent.FullName -ne $repoRoot.Path -and 
+        $_.FullName -notlike "*\.git\modules\*" -and
+        $_.FullName -notlike "*node_modules*" 
+    }
+
+if ($carpetasGit.Count -eq 0) {
+    Write-Host "✅ No se encontraron repositorios anidados conflictivos." -ForegroundColor Green
+    exit
+}
+
+Write-Host "⚠️  Se han detectado $($carpetasGit.Count) repositorios anidados." -ForegroundColor Magenta
+Write-Host "   El script intentará extraer la URL remota de cada uno automáticamente.`n"
+
+# Pausa de seguridad
+Read-Host "Presiona ENTER para comenzar el proceso (Ctrl+C para cancelar)"
+
+# Crear carpeta de backup
+New-Item -ItemType Directory -Force -Path $rutaCapsula | Out-Null
+
+# 3. PROCESAMIENTO
+foreach ($gitFolder in $carpetasGit) {
+    $carpetaProyecto = $gitFolder.Parent
+    $rutaRelativa = $carpetaProyecto.FullName.Substring($repoRoot.Path.Length + 1)
+    $rutaBackup = Join-Path $rutaCapsula $rutaRelativa
+    
+    Write-Host "------------------------------------------------------------"
+    Write-Host "Procesando: $rutaRelativa" -ForegroundColor Cyan
+
+    # A. DETECTAR URL (Antes de mover nada)
+    $url = git -C $carpetaProyecto.FullName remote get-url origin 2>$null
+
+    if (-not $url) {
+        Write-Host "❌ ERROR: No se detectó URL remota (origin) en esta carpeta." -ForegroundColor Red
+        Write-Host "   Saltando para evitar pérdida de datos..." -ForegroundColor Gray
+        continue
+    }
+    Write-Host "   🔗 URL detectada: $url" -ForegroundColor Gray
+
+    # B. DESVINCULAR DEL PADRE
+    git rm --cached -r "$rutaRelativa" 2>$null
+
+    # C. MOVER A CÁPSULA DEL TIEMPO
+    # Crear estructura de carpetas en backup
+    $parentBackup = Split-Path $rutaBackup -Parent
+    if (-not (Test-Path $parentBackup)) { New-Item -ItemType Directory -Force -Path $parentBackup | Out-Null }
+    
+    try {
+        Move-Item -Path $carpetaProyecto.FullName -Destination $rutaBackup -Force -ErrorAction Stop
+        Write-Host "   📦 MOVIDO a backup de seguridad." -ForegroundColor Green
+    }
+    catch {
+        Write-Host "   🛑 ERROR al mover la carpeta. ¿Quizás está en uso?" -ForegroundColor Red
+        continue
+    }
+
+    # D. AÑADIR COMO SUBMÓDULO
+    Write-Host "   ⬇️  Descargando submódulo limpio..." -ForegroundColor Yellow
+    git submodule add $url "$rutaRelativa"
+
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "   ❌ Falló la descarga de git. Restaurando desde backup..." -ForegroundColor Red
+        Move-Item -Path $rutaBackup -Destination $carpetaProyecto.FullName -Force
+        continue
+    }
+
+    # E. RESTAURACIÓN INTELIGENTE (.env y archivos ocultos)
+    # Busca recursivamente archivos .env en el backup de este proyecto
+    $archivosEnv = Get-ChildItem -Path $rutaBackup -Recurse -Filter ".env"
+    
+    if ($archivosEnv) {
+        foreach ($env in $archivosEnv) {
+            # Calcular dónde debe ir en la nueva estructura
+            $subPath = $env.FullName.Substring($rutaBackup.Length)
+            $destinoEnv = "$($carpetaProyecto.FullName)$subPath"
+            
+            Copy-Item -Path $env.FullName -Destination $destinoEnv -Force
+            Write-Host "   💎 .env RESTAURADO: $subPath" -ForegroundColor Magenta
+        }
+    }
+
+    # F. FIX PARA CARPETAS VACÍAS (Caso de estructuras redundantes)
+    # Si la carpeta recién creada está vacía (salvo .git), forzamos update
+    $contenido = Get-ChildItem -Path $carpetaProyecto.FullName
+    if ($contenido.Count -le 1) {
+        Write-Host "   🔧 La carpeta parece vacía. Forzando checkout..." -ForegroundColor Yellow
+        git submodule update --init --recursive "$rutaRelativa"
+    }
+}
+
+# 4. RESUMEN FINAL
+Write-Host "`n============================================================"
+Write-Host "✅ PROCESO FINALIZADO" -ForegroundColor Green
+Write-Host "============================================================"
+Write-Host "1. Tus carpetas antiguas están en el ESCRITORIO: $rutaCapsula"
+Write-Host "2. Tu repositorio ahora usa Submódulos oficiales."
+Write-Host "3. Revisa si falta algún archivo específico (PDFs, imágenes grandes) en el backup."
+
+Write-Host "`nPara guardar los cambios en la nube, ejecuta:" -ForegroundColor Cyan
+Write-Host "   git add ."
+Write-Host "   git commit -m 'Refactorización automática a Submódulos'"
+Write-Host "   git push"
