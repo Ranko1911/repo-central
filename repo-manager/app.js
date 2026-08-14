@@ -154,6 +154,17 @@ async function loadStatus() {
     }
 }
 
+// Auxiliary helper to format commit hashes cleanly
+function formatShortCommit(commitStr) {
+    if (!commitStr) return 'N/A';
+    const str = String(commitStr).trim();
+    if (str.startsWith('HEAD ')) {
+        const hash = str.replace('HEAD ', '');
+        return `HEAD ${hash.substring(0, 7)}`;
+    }
+    return str.length > 7 ? str.substring(0, 7) : str;
+}
+
 // Actualizar barra de estado del repositorio padre
 function updateParentStatus(parent) {
     const dot = document.getElementById("parent-status-dot");
@@ -161,8 +172,10 @@ function updateParentStatus(parent) {
     const branch = document.getElementById("parent-branch-badge");
     const commit = document.getElementById("parent-commit-badge");
 
+    const shortHash = formatShortCommit(parent.commit);
     branch.textContent = `Rama: ${parent.branch}`;
-    commit.textContent = `Commit: ${parent.commit}`;
+    commit.textContent = `Commit: ${shortHash}`;
+    commit.title = `Commit completo: ${parent.commit}`;
 
     if (parent.has_changes) {
         dot.className = "status-dot orange";
@@ -218,13 +231,13 @@ function renderSubmodules(submodules) {
 
         if (sub.status === 'active') {
             if (sub.has_changes) {
-                badgeHtml = '<span class="badge badge-warning">Modificado ✏️</span>';
+                badgeHtml = '<span class="badge badge-warning">✏️ Modificado</span>';
             } else if (sub.sync_status === 'detached') {
-                badgeHtml = '<span class="badge badge-warning">Detached ⚠️</span>';
+                badgeHtml = '<span class="badge badge-warning">⚠️ Detached</span>';
             } else if (sub.sync_status === 'behind') {
-                badgeHtml = '<span class="badge badge-info">Nueva Versión 📥</span>';
+                badgeHtml = '<span class="badge badge-info">📥 Detrás</span>';
             } else {
-                badgeHtml = '<span class="badge badge-success">Sincronizado ✅</span>';
+                badgeHtml = '<span class="badge badge-success">✓ Sincronizado</span>';
             }
             
             // Botones de acción normales
@@ -249,18 +262,18 @@ function renderSubmodules(submodules) {
                 ` : ''}
             `;
         } else if (sub.status === 'missing_mapping') {
-            badgeHtml = '<span class="badge badge-error">Sin Mapeo ❌</span>';
+            badgeHtml = '<span class="badge badge-error">✕ Sin Mapeo</span>';
             errorAlertHtml = `<div class="sub-error-alert">${sub.error}</div>`;
             actionButtonsHtml = `
                 <button class="btn btn-sm btn-success" id="btn-convert-${sub.name.replace(/\//g, '_')}" onclick="toggleConvertModal(true, '${sub.path}')">
-                    ✅ Registrar como Submódulo
+                    ✓ Registrar Submódulo
                 </button>
                 <button class="btn btn-sm btn-danger" id="btn-fix-cached-${sub.name.replace(/\//g, '_')}" onclick="fixOrphanedSubmodule('${sub.path}')">
-                    🗑️ Solo Limpiar Caché
+                    🗑️ Limpiar Caché
                 </button>
             `;
         } else if (sub.status === 'uninitialized') {
-            badgeHtml = '<span class="badge badge-warning">Sin Inicializar ⚙️</span>';
+            badgeHtml = '<span class="badge badge-warning">⚙️ Sin Init</span>';
             errorAlertHtml = `<div class="sub-error-alert">${sub.error}</div>`;
             actionButtonsHtml = `
                 <button class="btn btn-sm btn-primary" id="btn-init-${sub.name.replace(/\//g, '_')}" onclick="runSubmoduleAction('${sub.path}', 'pull')">
@@ -268,7 +281,7 @@ function renderSubmodules(submodules) {
                 </button>
             `;
         } else if (sub.status === 'missing_folder') {
-            badgeHtml = '<span class="badge badge-error">Carpeta Faltante 📂</span>';
+            badgeHtml = '<span class="badge badge-error">📂 Faltante</span>';
             errorAlertHtml = `<div class="sub-error-alert">${sub.error}</div>`;
             actionButtonsHtml = `
                 <button class="btn btn-sm btn-primary" id="btn-clone-${sub.name.replace(/\//g, '_')}" onclick="runSubmoduleAction('${sub.path}', 'pull')">
@@ -276,18 +289,19 @@ function renderSubmodules(submodules) {
                 </button>
             `;
         } else {
-            badgeHtml = '<span class="badge badge-outline">Desconocido ❓</span>';
+            badgeHtml = '<span class="badge badge-outline">❓ Desconocido</span>';
             errorAlertHtml = sub.error ? `<div class="sub-error-alert">${sub.error}</div>` : '';
         }
 
         // Cortar la URL para visualización
-        const displayUrl = sub.url.length > 40 ? sub.url.substring(0, 37) + '...' : sub.url;
+        const displayUrl = sub.url.length > 36 ? sub.url.substring(0, 33) + '...' : sub.url;
+        const shortCommit = formatShortCommit(sub.commit);
 
         card.innerHTML = `
             <div class="submodule-card-header">
                 <div class="sub-title">
-                    <h4>${sub.name}</h4>
-                    <span class="sub-path">${sub.path}</span>
+                    <h4 title="${sub.name}">${sub.name}</h4>
+                    <span class="sub-path" title="${sub.path}">${sub.path}</span>
                 </div>
                 ${badgeHtml}
             </div>
@@ -301,11 +315,11 @@ function renderSubmodules(submodules) {
                 </div>
                 <div class="detail-item">
                     <span class="detail-label">Commit</span>
-                    <span class="detail-val" title="${sub.commit}">${sub.commit}</span>
+                    <span class="detail-val" title="${sub.commit}">${shortCommit}</span>
                 </div>
                 <div class="detail-item" style="grid-column: 1 / span 2;">
                     <span class="detail-label">URL Remota</span>
-                    <a href="${sub.url.startsWith('http') ? sub.url.replace('.git', '') : '#'}" target="_blank" class="detail-val" style="color: var(--primary-blue); text-decoration: none;">
+                    <a href="${sub.url.startsWith('http') ? sub.url.replace('.git', '') : '#'}" target="_blank" class="detail-val" style="color: var(--accent-blue); text-decoration: none;">
                         ${displayUrl} 🔗
                     </a>
                 </div>
