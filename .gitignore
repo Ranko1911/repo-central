@@ -1,0 +1,45 @@
+# ──────────────────────────────────────────────
+# .gitignore para repo-vault
+# ──────────────────────────────────────────────
+
+# Archivos de video / audio grandes
+*.mp4
+*.mkv
+*.avi
+*.mov
+*.wmv
+*.flv
+*.webm
+*.m4v
+
+# Datasets y archivos CSV pesados
+# (descomenta si necesitas rastrear CSVs pequeños)
+# *.csv
+
+# Archivos ZIP / comprimidos grandes
+*.zip
+*.rar
+*.7z
+*.tar
+*.tar.gz
+*.tar.bz2
+
+# Archivos de Office grandes
+*.pptx
+*.xlsx
+# *.pdf  # Mantener PDFs si son apuntes
+
+# Archivos temporales de sistema
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Entornos virtuales de Python
+venv/
+.venv/
+env/
+__pycache__/
+*.pyc
+
+# Node modules
+node_modules/

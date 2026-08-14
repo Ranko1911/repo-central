@@ -1,0 +1,2 @@
+# Archivo base de submódulos de Git
+# Agrega repositorios con: git submodule add <URL_GITHUB> <RUTA_CARPETA>
